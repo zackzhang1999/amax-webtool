@@ -64,6 +64,12 @@ function getDownloadUrl(fw: FwOrBmc) {
   return `${baseUrl}${separator}name=${encodeURIComponent(fw.fileName)}`;
 }
 
+function getDirectDownloadUrl(url: string) {
+  if (!url.startsWith('/api/')) return url;
+  const directBase = API_BASE || `http://${window.location.hostname}:3201`;
+  return `${directBase}${url}`;
+}
+
 export default function FirmwareDetail() {
   const { id } = useParams<{ id: string }>();
   const {
@@ -131,24 +137,24 @@ export default function FirmwareDetail() {
   const status = getStatusDisplay();
   const StatusIcon = status.icon;
 
-  const handleDownload = async (fw: FwOrBmc) => {
+  const handleDownload = (fw: FwOrBmc) => {
     if (!fw.downloadUrl) return;
     if ('status' in fw && fw.status !== 'synced') return;
-    try {
-      const res = await fetch(getDownloadUrl(fw));
-      if (!res.ok) throw new Error('下载固件失败');
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
+
+    const downloadUrl = getDirectDownloadUrl(getDownloadUrl(fw));
+    const a = document.createElement('a');
+    a.href = downloadUrl;
+    a.rel = 'noopener noreferrer';
+
+    if (/^https?:\/\//i.test(downloadUrl) && !downloadUrl.startsWith(window.location.origin) && !downloadUrl.startsWith(API_BASE || window.location.origin)) {
+      a.target = '_blank';
+    } else {
       a.download = fw.fileName || `${itemLabel}_${fw.version}`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('下载固件失败', error);
     }
+
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   };
 
   const handleSaveNotes = () => {
@@ -341,28 +347,30 @@ export default function FirmwareDetail() {
                   <FileText className="w-5 h-5 text-amax" />
                   备注
                 </h3>
-                <button
-                  onClick={() => {
-                    if (editingNotes) {
-                      handleSaveNotes();
-                    } else {
-                      setEditingNotes(true);
-                    }
-                  }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/[0.03] border border-white/10 text-xs text-ts hover:text-tp hover:border-white/20 transition-all"
-                >
-                  {editingNotes ? (
-                    <>
-                      <Save className="w-3 h-3" />
-                      保存
-                    </>
-                  ) : (
-                    <>
-                      <Edit3 className="w-3 h-3" />
-                      编辑
-                    </>
-                  )}
-                </button>
+                {hasPermission('models', 'edit') && (
+                  <button
+                    onClick={() => {
+                      if (editingNotes) {
+                        handleSaveNotes();
+                      } else {
+                        setEditingNotes(true);
+                      }
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/[0.03] border border-white/10 text-xs text-ts hover:text-tp hover:border-white/20 transition-all"
+                  >
+                    {editingNotes ? (
+                      <>
+                        <Save className="w-3 h-3" />
+                        保存
+                      </>
+                    ) : (
+                      <>
+                        <Edit3 className="w-3 h-3" />
+                        编辑
+                      </>
+                    )}
+                  </button>
+                )}
               </div>
 
               {editingNotes ? (
@@ -499,7 +507,7 @@ export default function FirmwareDetail() {
                           >
                             <Download className="w-4 h-4" style={{ color: accentColor }} />
                           </button>
-                          {(activeTab === 'driver' || activeTab === 'manual') && (
+                          {(activeTab === 'driver' || activeTab === 'manual') && hasPermission('models', 'delete') && (
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();

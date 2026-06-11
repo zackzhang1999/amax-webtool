@@ -58,6 +58,34 @@ function getDownloadUrl(tool: SoftwareTool) {
   return `${baseUrl}${separator}name=${encodeURIComponent(tool.fileName)}`;
 }
 
+function getDirectDownloadUrl(url: string) {
+  if (!url.startsWith('/api/')) return url;
+  const directBase = API_BASE || `http://${window.location.hostname}:3201`;
+  return `${directBase}${url}`;
+}
+
+async function copyText(text: string) {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch (error) {
+    console.warn('剪贴板复制失败，尝试备用复制方式', error);
+  }
+
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.style.position = 'fixed';
+  textarea.style.opacity = '0';
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+  const ok = document.execCommand('copy');
+  document.body.removeChild(textarea);
+  return ok;
+}
+
 const categoryConfig: Record<ToolCategory, { label: string; color: string; bg: string; icon: React.ElementType }> = {
   diagnostic: { label: '诊断工具', color: 'text-cyan-500', bg: 'bg-cyan-500/10', icon: Stethoscope },
   automation: { label: '自动化', color: 'text-amax', bg: 'bg-amax/10', icon: Workflow },
@@ -115,7 +143,7 @@ export default function SoftwareHub() {
 
   const currentSelectedTool = selectedTool ? tools.find(t => t.id === selectedTool.id) || selectedTool : null;
 
-  const handleDownload = async (tool: SoftwareTool) => {
+  const handleDownload = (tool: SoftwareTool) => {
     if ((tool.status || 'active') !== 'active') {
       alert('该工具还未通过审核，审核通过后才能下载。');
       return;
@@ -124,22 +152,22 @@ export default function SoftwareHub() {
       alert('该工具暂无可下载附件，请先在工具管理中上传附件。');
       return;
     }
-    try {
-      const res = await fetch(getDownloadUrl(tool));
-      if (!res.ok) throw new Error('下载工具失败');
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
+
+    const downloadUrl = getDirectDownloadUrl(getDownloadUrl(tool));
+    const a = document.createElement('a');
+    a.href = downloadUrl;
+    a.rel = 'noopener noreferrer';
+
+    if (/^https?:\/\//i.test(downloadUrl) && !downloadUrl.startsWith(window.location.origin) && !downloadUrl.startsWith(API_BASE || window.location.origin)) {
+      a.target = '_blank';
+    } else {
       a.download = tool.fileName || `${tool.name}_v${tool.version}`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      updateSoftwareTool(tool.id, { downloads: tool.downloads + 1 });
-    } catch (error) {
-      console.error('下载工具失败', error);
     }
+
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    updateSoftwareTool(tool.id, { downloads: tool.downloads + 1 });
   };
 
   const handleSoftwareFileSelect = async (files: File[]) => {
@@ -183,12 +211,15 @@ export default function SoftwareHub() {
     setUploadForm({ name: '', description: '', category: 'utility', version: '', author: '', tags: '', readme: '', fileName: '', downloadUrl: '', size: '', md5: '' });
   };
 
-  const copyReadme = () => {
-    if (currentSelectedTool) {
-      navigator.clipboard.writeText(currentSelectedTool.readme);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+  const copyReadme = async () => {
+    if (!currentSelectedTool) return;
+    const ok = await copyText(currentSelectedTool.readme || '');
+    if (!ok) {
+      alert('复制失败，请手动选择 README 内容复制');
+      return;
     }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   return (

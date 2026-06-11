@@ -135,7 +135,14 @@ export default function ISOCenter() {
       return;
     }
 
-    const downloadUrl = getDownloadUrl(mirror);
+    let downloadUrl = getDownloadUrl(mirror);
+
+    // 对于本地上传的文件，绕过 Vite 代理直接走后端，避免代理缓冲大文件导致延迟
+    if (downloadUrl.startsWith('/api/')) {
+      const directBase = API_BASE || `http://${window.location.hostname}:3201`;
+      downloadUrl = `${directBase}${downloadUrl}`;
+    }
+
     const a = document.createElement('a');
     a.href = downloadUrl;
     a.rel = 'noopener noreferrer';
@@ -219,8 +226,14 @@ export default function ISOCenter() {
 
   const copyDownloadUrl = async (mirror: ISOMirror) => {
     if (!mirror.downloadUrl) return;
-    const url = getDownloadUrl(mirror);
-    const ok = await copyText(url.startsWith('/') ? `${window.location.origin}${url}` : url);
+    let url = getDownloadUrl(mirror);
+    // 对于本地上传的文件，复制直连地址
+    if (url.startsWith('/api/')) {
+      const directBase = API_BASE || `http://${window.location.hostname}:3201`;
+      url = `${directBase}${url}`;
+    }
+    const fullUrl = url.startsWith('/') ? `${window.location.origin}${url}` : url;
+    const ok = await copyText(fullUrl);
     if (!ok) return;
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);

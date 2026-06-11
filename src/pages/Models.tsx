@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import FirmwareMatrix from '@/components/FirmwareMatrix';
 import { useData } from '@/contexts/DataContext';
+import { useAuth } from '@/contexts/AuthContext';
 
 /* ---- Reusable form components (local) ---- */
 function FormInput({ label, value, onChange, placeholder, type = 'text', readOnly }: {
@@ -68,6 +69,7 @@ function FormTextArea({ label, value, onChange, placeholder, rows = 4 }: {
 
 export default function Models() {
   const { serverModels: models, addServerModel, brands } = useData();
+  const { hasPermission } = useAuth();
 
   // Filter states
   const [showFilters, setShowFilters] = useState(false);
@@ -186,13 +188,15 @@ export default function Models() {
               <ChevronDown className={`w-3 h-3 transition-transform ${showFilters ? 'rotate-180' : ''}`} />
             </button>
 
-            <button
-              onClick={() => setShowAddModal(true)}
-              className="liquid-cta-btn py-3 px-5 text-sm"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              添加机器
-            </button>
+            {hasPermission('models', 'create') && (
+              <button
+                onClick={() => setShowAddModal(true)}
+                className="liquid-cta-btn py-3 px-5 text-sm"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                添加机器
+              </button>
+            )}
           </div>
         </div>
 

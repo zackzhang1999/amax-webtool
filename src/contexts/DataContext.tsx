@@ -35,23 +35,25 @@ async function persistServerData(data: StoredData) {
   });
 }
 
-function isUploadedFileUrl(downloadUrl?: string) {
-  if (!downloadUrl) return false;
-  const pathPart = downloadUrl.split('?')[0];
-  if (pathPart.startsWith('/api/uploads/firmware/')) return true;
-  if (API_BASE && pathPart.startsWith(`${API_BASE}/api/uploads/firmware/`)) return true;
-  return false;
+function getUploadedFilePath(downloadUrl?: string) {
+  if (!downloadUrl) return '';
+  try {
+    const url = downloadUrl.startsWith('http') ? new URL(downloadUrl) : new URL(downloadUrl, window.location.origin);
+    return url.pathname.startsWith('/api/uploads/firmware/') ? url.pathname : '';
+  } catch {
+    const pathPart = downloadUrl.split('?')[0];
+    return pathPart.startsWith('/api/uploads/firmware/') ? pathPart : '';
+  }
 }
 
 function getStoredNameFromDownloadUrl(downloadUrl?: string) {
-  if (!downloadUrl) return '';
-  const pathPart = downloadUrl.split('?')[0];
-  const storedName = pathPart.split('/').pop();
+  const uploadedPath = getUploadedFilePath(downloadUrl);
+  if (!uploadedPath) return '';
+  const storedName = uploadedPath.split('/').pop();
   return storedName ? decodeURIComponent(storedName) : '';
 }
 
 async function deleteUploadedFile(downloadUrl?: string) {
-  if (!isUploadedFileUrl(downloadUrl)) return;
   const storedName = getStoredNameFromDownloadUrl(downloadUrl);
   if (!storedName) return;
   try {
@@ -227,6 +229,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const deleteServerModel = useCallback((id: string) => {
     setData((prev) => {
       const model = prev.serverModels.find((m) => m.id === id);
+      if (model) {
+        model.firmwares.forEach((fw) => deleteUploadedFile(fw.downloadUrl));
+        model.bmcVersions.forEach((bmc) => deleteUploadedFile(bmc.downloadUrl));
+        (model.drivers || []).forEach((driver) => deleteUploadedFile(driver.downloadUrl));
+        (model.manuals || []).forEach((manual) => deleteUploadedFile(manual.downloadUrl));
+      }
       return {
         ...prev,
         serverModels: prev.serverModels.filter((m) => m.id !== id),
@@ -237,7 +245,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
             action: 'delete',
             user: 'admin',
             target: model.name,
-            details: `删除机型 ${model.name}`,
+            details: `删除机型 ${model.name}，并同步删除关联上传文件`,
           },
           ...prev.auditLogs,
         ] : prev.auditLogs,
@@ -299,6 +307,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setData((prev) => {
       const model = prev.serverModels.find((m) => m.id === modelId);
       const deleted = model?.firmwares.find((f) => f.id === fwId);
+      deleteUploadedFile(deleted?.downloadUrl);
       return {
         ...prev,
         serverModels: prev.serverModels.map((m) => {
